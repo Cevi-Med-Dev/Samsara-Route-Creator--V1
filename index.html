@@ -275,6 +275,7 @@
     }
 
     .results {
+      display: none;
       min-height: 240px;
       padding: 18px;
       border-radius: 22px;
@@ -321,23 +322,109 @@
     }
 
     .stop-card {
-      padding: 14px 16px;
+      padding: 16px 18px;
       border-radius: 16px;
       border: 1px solid rgba(196, 11, 17, 0.12);
-      background: linear-gradient(135deg, rgba(196, 11, 17, 0.05), rgba(255, 255, 255, 0.98));
+      background: linear-gradient(135deg, rgba(196, 11, 17, 0.04), rgba(255, 255, 255, 0.98));
+      display: grid;
+      gap: 8px;
     }
 
-    .stop-card strong {
-      display: block;
+    .stop-card .stop-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .stop-card .stop-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--brand);
+      color: white;
+      font-size: 0.78rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .stop-card .stop-title {
+      flex: 1;
+      font-weight: 700;
       color: var(--brand-dark);
-      margin-bottom: 6px;
+      font-size: 1rem;
     }
 
-    .stop-card span {
+    .stop-card .stop-invoice {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(196, 11, 17, 0.09);
+      color: var(--brand-dark);
+      white-space: nowrap;
+    }
+
+    .stop-card .stop-equipment {
+      font-size: 0.88rem;
+      color: var(--ink);
+      font-style: italic;
+      padding: 6px 10px;
+      background: rgba(196, 11, 17, 0.04);
+      border-radius: 10px;
+      border-left: 3px solid rgba(196, 11, 17, 0.2);
+    }
+
+    .stop-card .stop-address {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .stop-card .stop-meta {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .stop-card .stop-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .route-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      padding: 16px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(196, 11, 17, 0.06), rgba(255, 255, 255, 0.95));
+      border: 1px solid rgba(196, 11, 17, 0.1);
+    }
+
+    .route-summary .summary-item {
+      text-align: center;
+    }
+
+    .route-summary .summary-item small {
       display: block;
       color: var(--muted);
-      font-size: 0.92rem;
-      line-height: 1.5;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+
+    .route-summary .summary-item strong {
+      color: var(--brand-dark);
+      font-size: 1.1rem;
     }
 
     @media (max-width: 980px) {
@@ -349,7 +436,8 @@
     @media (max-width: 760px) {
       .form-grid,
       .inline-name,
-      .meta {
+      .meta,
+      .route-summary {
         grid-template-columns: 1fr;
       }
 
@@ -360,6 +448,10 @@
       .hero,
       .panel {
         padding: 22px;
+      }
+
+      .stop-card .stop-header {
+        flex-wrap: wrap;
       }
     }
   </style>
@@ -446,7 +538,7 @@
               <option>Box Truck 3 / Isuzu 2021</option>
               <option>Box Truck 4 / Isuzu 2022</option>
               <option>Cascadia / Truck 5</option>
-              <option>GZHD-PWD-82Z</option>
+              <option>GZHD-PWD-82Z - NOT AVAILABLE</option>
             </select>
           </div>
 
@@ -461,8 +553,6 @@
           </div>
 
         </div>
-
-  
 
         <div class="actions" style="margin-top: 20px;">
           <button class="button button-primary" id="submitButton" type="submit">Retrieve Route Data</button>
@@ -482,6 +572,8 @@
         <pre id="responseViewer">No data retrieved yet.</pre>
       </div>
 
+      <div id="routeSummaryContainer"></div>
+
       <div class="stops-panel">
         <div class="results-header">
           <div>
@@ -492,7 +584,7 @@
         <div class="stops-list" id="stopsViewer">
           <div class="stop-card">
             <strong>No stops retrieved yet.</strong>
-            <span>The stop list will appear here after the webhook responds.</span>
+            <span class="stop-address">The stop list will appear here after the webhook responds.</span>
           </div>
         </div>
       </div>
@@ -517,6 +609,7 @@
     const statusMessage = document.getElementById('statusMessage');
     const responseViewer = document.getElementById('responseViewer');
     const stopsViewer = document.getElementById('stopsViewer');
+    const routeSummaryContainer = document.getElementById('routeSummaryContainer');
 
     function seedYears() {
       const currentYear = new Date().getFullYear();
@@ -580,36 +673,96 @@
       return [];
     }
 
+    function formatDateTime(isoString) {
+      if (!isoString || isoString === 'No arrival time' || isoString === 'No departure time') return null;
+      try {
+        const d = new Date(isoString);
+        if (isNaN(d.getTime())) return isoString;
+        return d.toLocaleString('en-US', {
+          timeZone: 'America/New_York',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+      } catch {
+        return isoString;
+      }
+    }
+
+    function renderRouteSummary(data) {
+      const rName = data.routeName || '';
+      const vName = data.vehicleName || '';
+      const stops = data.stops || [];
+
+      if (!rName && !stops.length) {
+        routeSummaryContainer.innerHTML = '';
+        return;
+      }
+
+      routeSummaryContainer.innerHTML = `
+        <div class="route-summary">
+          <div class="summary-item">
+            <small>Route</small>
+            <strong>${rName || 'N/A'}</strong>
+          </div>
+          <div class="summary-item">
+            <small>Vehicle</small>
+            <strong>${vName || 'N/A'}</strong>
+          </div>
+          <div class="summary-item">
+            <small>Total Stops</small>
+            <strong>${stops.length}</strong>
+          </div>
+        </div>
+      `;
+    }
+
     function renderStops(stops) {
       if (!Array.isArray(stops) || stops.length === 0) {
         stopsViewer.innerHTML = `
           <div class="stop-card">
             <strong>No stops were found in the webhook response.</strong>
-            <span>Check the validation panel to inspect the raw payload.</span>
+            <span class="stop-address">Check the validation panel to inspect the raw payload.</span>
           </div>
         `;
         return;
       }
 
       stopsViewer.innerHTML = stops.map((stop, index) => {
+        const num = stop.stopNumber || (index + 1);
+        const pos = stop.position ? `Pos #${stop.position}` : '';
+        const name = stop.customerName || '';
+        const invoice = stop.invoiceNum || '';
+        const equip = stop.equipment || '';
+
         const location = stop.singleUseLocation || stop.location || stop;
-        const address =
-          location.address ||
-          location.formattedAddress ||
-          stop.address ||
-          'Address not provided';
-        const arrival = stop.scheduledArrivalTime || 'No arrival time';
-        const departure = stop.scheduledDepartureTime || 'No departure time';
-        const latitude = location.latitude ?? 'n/a';
-        const longitude = location.longitude ?? 'n/a';
+        const address = stop.address || location.address || location.formattedAddress || 'Address not provided';
+        const arrival = stop.scheduledArrivalTime;
+        const departure = stop.scheduledDepartureTime;
+
+        const arrivalFmt = formatDateTime(arrival);
+        const departureFmt = formatDateTime(departure);
+
+        const headerParts = [];
+        if (name) headerParts.push(name);
+        if (pos) headerParts.push(pos);
+        const title = headerParts.length ? headerParts.join(' — ') : `Stop ${num}`;
 
         return `
           <div class="stop-card">
-            <strong>Stop ${index + 1}</strong>
-            <span>${address}</span>
-            <span>Arrival: ${arrival}</span>
-            <span>Departure: ${departure}</span>
-            <span>Lat: ${latitude} | Lng: ${longitude}</span>
+            <div class="stop-header">
+              <span class="stop-number">${num}</span>
+              <span class="stop-title">${title}</span>
+              ${invoice ? `<span class="stop-invoice">INV #${invoice}</span>` : ''}
+            </div>
+            ${equip ? `<div class="stop-equipment">${equip}</div>` : ''}
+            <div class="stop-address">${address}</div>
+            <div class="stop-meta">
+              ${arrivalFmt ? `<span>Arrival: ${arrivalFmt} ET</span>` : ''}
+              ${departureFmt ? `<span>Departure: ${departureFmt} ET</span>` : ''}
+            </div>
           </div>
         `;
       }).join('');
@@ -624,6 +777,7 @@
       year.value = String(new Date().getFullYear());
       responseViewer.textContent = 'No data retrieved yet.';
       renderStops([]);
+      routeSummaryContainer.innerHTML = '';
       setStatus('');
       buildRouteName();
     });
@@ -670,6 +824,7 @@
       setStatus('Retrieving route data from the route creator bot...', '');
       responseViewer.textContent = 'Loading...';
       renderStops([]);
+      routeSummaryContainer.innerHTML = '';
 
       try {
         const formData = new FormData();
@@ -703,9 +858,15 @@
           null,
           2
         );
+
+        renderRouteSummary(data);
         renderStops(findStops(data));
 
-        setStatus('Route data retrieved. Review the validation panel carefully before creating the route.', 'success');
+        const stopCount = findStops(data).length;
+        setStatus(
+          `Route created with ${stopCount} stop${stopCount !== 1 ? 's' : ''}. Review below before confirming in Samsara.`,
+          'success'
+        );
       } catch (error) {
         responseViewer.textContent = JSON.stringify(
           {
@@ -716,6 +877,7 @@
           2
         );
         renderStops([]);
+        routeSummaryContainer.innerHTML = '';
         setStatus(error.message, 'error');
       } finally {
         submitButton.disabled = false;
@@ -725,7 +887,6 @@
     seedYears();
     seedRouteNumbers();
     buildRouteName();
-
   </script>
 </body>
 </html>
